@@ -1,0 +1,49 @@
+# Terraform / Terragrunt
+**/.terraform/
+**/.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfplan
+.terragrunt-cache/
+crash.log
+crash.*.log
+
+# Local-value tfvars (never commit machine-specific values)
+*.local.tfvars
+*.auto.tfvars
+
+# Kubeconfig fetched from listClusterAdminCredential (machine-local, do not commit)
+# Anchored to repo root so it does NOT match the `kubeconfig` Terraform module directory.
+/kubeconfig
+*.kubeconfig
+
+# miniblue runtime TLS material (copied/generated per machine, do not commit)
+.miniblue-cert.pem
+.miniblue-kv-ca.pem
+
+# Build output
+apps/*/target/
+apps/*/build/
+*.class
+
+# Python bytecode cache
+__pycache__/
+*.py[cod]
+
+# Helm packaged charts
+*.tgz
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+
+# Local secrets / environment overrides (e.g. GITOPS_REPO_TOKEN) — never commit
+.env
+.env.*
+!.env.example
+
+# Scratch / vendored upstream source (constitution scope boundary: never commit miniblue's
+# or ArgoCD's upstream source — consume them as released, pinned artifacts).
+tmp/
+
+RGS_KUBERNETES.pdf

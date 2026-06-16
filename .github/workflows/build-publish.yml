@@ -1,0 +1,78 @@
+name: build-publish
+
+# Manual trigger only. Builds ONE service's container image for a given version and
+# pushes it to GitHub Container Registry (ghcr.io/<owner>/<service>:<version>).
+# Mirrors the former scripts/build-publish.sh.
+on:
+  workflow_dispatch:
+    inputs:
+      service:
+        description: Service to build and push (must have apps/<service>/Dockerfile)
+        required: true
+        type: choice
+        options:
+          - service-a
+          - service-b
+      version:
+        description: Image version tag (semver, never "latest")
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate inputs
+        run: |
+          set -euo pipefail
+          if [[ "${{ inputs.version }}" == "latest" ]]; then
+            echo "::error::refusing to use 'latest' (FR-006/FR-014)"; exit 1
+          fi
+          if [[ ! -f "apps/${{ inputs.service }}/Dockerfile" ]]; then
+            echo "::error::no Dockerfile at apps/${{ inputs.service }} — unknown service"; exit 1
+          fi
+
+      - name: Compute image ref (GHCR requires a lowercase owner)
+        id: ref
+        run: |
+          set -euo pipefail
+          owner="${{ github.repository_owner }}"
+          echo "image=${REGISTRY}/${owner,,}/${{ inputs.service }}:${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # provenance/sbom=false: emit a single-platform image manifest, NOT a buildx
+      # manifest list with attestation sub-manifests. k3s/containerd fails to resolve
+      # the runnable config from an attestation index ("no command specified").
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: apps/${{ inputs.service }}
+          push: true
+          tags: ${{ steps.ref.outputs.image }}
+          provenance: false
+          sbom: false
+
+      - name: Summary
+        run: |
+          {
+            echo "### Image published @ ${{ inputs.version }}"
+            echo ""
+            echo "- image (push & pull): \`${{ steps.ref.outputs.image }}\`"
+            echo "- point values at it: \`gitops/local/values/${{ inputs.service }}/values.yaml\` → \`image.tag: \"${{ inputs.version }}\"\`"
+          } >> "$GITHUB_STEP_SUMMARY"

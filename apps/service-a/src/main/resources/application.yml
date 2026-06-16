@@ -1,0 +1,22 @@
+server:
+  port: 8080
+
+app:
+  # Overridden at build time / via chart appVersion; observable at runtime (FR-013).
+  version: "@project.version@"
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      group:
+        readiness:
+          # Readiness fails if the secret-backed health indicator is DOWN (missing secret).
+          include: readinessState,secret
+        liveness:
+          include: livenessState

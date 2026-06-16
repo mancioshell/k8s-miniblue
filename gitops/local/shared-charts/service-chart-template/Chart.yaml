@@ -1,0 +1,13 @@
+apiVersion: v2
+name: service-chart-template
+description: Generic, shared service chart reused by every service, delivered via ArgoCD GitOps
+type: application
+# Chart version — bumped on every release; this is the value each ArgoCD Application pins
+# (FR-008/FR-010). One shared chart serves every service; per-service values select image/name.
+version: 1.1.0
+# appVersion is informational here — the deployed app version comes from each service's image tag.
+appVersion: "1.0.0"
+# Propagated to the chart's OCI manifest so GHCR links the package to the repo
+# (shows under the repo's "Packages" tab, inherits the repo's permissions).
+annotations:
+  org.opencontainers.image.source: https://github.com/mancioshell/k8s-miniblue

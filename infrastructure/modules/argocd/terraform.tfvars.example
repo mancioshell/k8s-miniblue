@@ -1,0 +1,9 @@
+# Copy to terraform.tfvars and adjust. Machine-local values — do not commit the real file.
+kubeconfig_path = "../../../kubeconfig"
+
+# Public GitOps repo ArgoCD watches (desired state). Replace with your repo.
+gitops_repo_url      = "https://github.com/<you>/<gitops-repo>.git"
+gitops_repo_revision = "main"
+
+# Flip to true once gitops/local/argocd-apps is populated and pushed (US3 / T039).
+enable_root_app = false

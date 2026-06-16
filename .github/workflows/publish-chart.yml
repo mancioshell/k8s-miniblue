@@ -1,0 +1,62 @@
+name: publish-chart
+
+# Manual trigger only. Packages the SHARED Helm chart and pushes it to GitHub
+# Container Registry as an OCI artifact (oci://ghcr.io/<owner>/charts/service-chart-template).
+# Every springboot service reuses this one chart. Mirrors the former scripts/publish-chart.sh.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Chart version (semver) to package and push
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  CHART_NAME: service-chart-template
+  CHART_DIR: gitops/local/shared-charts/service-chart-template
+
+jobs:
+  publish-chart:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+
+      - name: Compute OCI repo (GHCR requires a lowercase owner)
+        id: repo
+        run: |
+          set -euo pipefail
+          owner="${{ github.repository_owner }}"
+          echo "oci=oci://${REGISTRY}/${owner,,}/charts" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR (OCI)
+        run: |
+          set -euo pipefail
+          printf '%s' "${{ secrets.GITHUB_TOKEN }}" \
+            | helm registry login "${REGISTRY}" -u "${{ github.actor }}" --password-stdin
+
+      - name: Package and push chart
+        run: |
+          set -euo pipefail
+          pkg_dir="$(mktemp -d)"
+          helm package "${CHART_DIR}" --version "${{ inputs.version }}" --destination "${pkg_dir}"
+          pkg_tgz="${pkg_dir}/${CHART_NAME}-${{ inputs.version }}.tgz"
+          [[ -f "${pkg_tgz}" ]] || { echo "::error::expected package ${pkg_tgz} not produced"; exit 1; }
+          helm push "${pkg_tgz}" "${{ steps.repo.outputs.oci }}"
+
+      - name: Summary
+        run: |
+          {
+            echo "### Chart published @ ${{ inputs.version }}"
+            echo ""
+            echo "- chart: \`${{ steps.repo.outputs.oci }}/${CHART_NAME}:${{ inputs.version }}\`"
+            echo "- retarget each Application: \`gitops/local/argocd-apps/applicationset.yaml\` → chart source \`targetRevision: ${{ inputs.version }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

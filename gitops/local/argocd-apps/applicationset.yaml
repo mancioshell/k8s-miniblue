@@ -1,0 +1,52 @@
+# ArgoCD ApplicationSet — replaces the per-service Application manifests.
+# ONE declarative set that renders a multi-source Application per service. The git
+# directory generator auto-discovers services from this same GitOps repo's
+# values/<service>/ folders, so adding a service = add gitops/local/values/<service>/values.yaml
+# and push — no edit here. Each generated Application uses TWO sources:
+#   1. the SHARED, generic chart service-chart-template from OCI (ghcr.io/<owner>/charts)
+#   2. this Git repo as the $values source (per-service overrides under values/)
+# The container IMAGE is pulled from ghcr.io by the kubelet (imagePullSecret ghcr-pull,
+# created by the cluster-wiring module). NO secret values here (FR-012).
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: springboot-services
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    # Auto-discover one entry per values/<service>/ directory in the GitOps repo.
+    - git:
+        repoURL: https://github.com/mancioshell/k8s-miniblue
+        revision: main
+        directories:
+          - path: gitops/local/values/*
+  template:
+    metadata:
+      # Generated Application is named after the service directory (e.g. service-a).
+      name: '{{.path.basename}}'
+    spec:
+      project: default
+      sources:
+        # 1. Shared chart from the OCI Helm registry. Bumping this targetRevision rolls the
+        #    chart for EVERY service at once (single shared, generic chart by design).
+        - repoURL: ghcr.io/mancioshell/charts
+          chart: service-chart-template
+          targetRevision: 1.1.0
+          helm:
+            valueFiles:
+              - $values/gitops/local/values/{{.path.basename}}/values.yaml
+        # 2. The GitOps Git repo as the $values source (per-service overrides).
+        - repoURL: https://github.com/mancioshell/k8s-miniblue
+          targetRevision: main
+          ref: values
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: '{{.path.basename}}'
+      syncPolicy:
+        automated:
+          selfHeal: true
+          prune: true
+        syncOptions:
+          - CreateNamespace=true
