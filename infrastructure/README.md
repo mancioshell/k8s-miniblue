@@ -1,16 +1,19 @@
 # infrastructure/
 
 Reusable Terraform **modules** and the Terragrunt **live** composition for the single `local`
-environment. The cluster platform add-ons (ArgoCD, Secrets Store CSI, the miniblue KV/IMDS
-shim) are now plain modules under `modules/` — there is no separate `bootstrap/` layer.
+environment. The cluster platform add-ons (ArgoCD, Secrets Store CSI, the miniblue CoreDNS/CA-trust
+wiring, the Azure Workload Identity webhook) are now plain modules under `modules/` — there is no
+separate `bootstrap/` layer.
 
 ```text
 infrastructure/
 ├── modules/        # reusable Terraform modules (target: miniblue)
-│   ├── argocd/         # ArgoCD install + repo credentials (OCI chart repo + GitOps repo)
-│   ├── cluster-wiring/ # imagePullSecret (ghcr-pull) + miniblue KV/IMDS proxy DaemonSet
-│   ├── secrets-csi/    # Secrets Store CSI driver + Azure provider
-│   └── ...             # RG, managed identity, ACR, Key Vault, AKS, kubeconfig
+│   ├── argocd/             # ArgoCD install + repo credentials (OCI chart repo + GitOps repo)
+│   ├── cluster-wiring/     # imagePullSecret (ghcr-pull) + CoreDNS overrides + miniblue CA trust bundle
+│   ├── secrets-csi/        # Secrets Store CSI driver + Azure provider
+│   ├── workload-identity/  # Azure Workload Identity mutating webhook
+│   ├── federated-credential/ # azurerm_federated_identity_credential per service
+│   └── ...                 # RG, managed identity, ACR, Key Vault, AKS, kubeconfig
 └── live-k8s/       # Terragrunt live config (root.hcl + local/ environment)
     └── local/          # one unit per object; one tfstate per unit
 ```

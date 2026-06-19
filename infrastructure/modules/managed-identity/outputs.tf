@@ -1,15 +1,15 @@
 # MODULE OUTPUTS
 output "id" {
-  value       = local.id
-  description = "User-assigned managed identity resource ID (synthetic — emulator stub)."
+  value       = azurerm_user_assigned_identity.this.id
+  description = "User-assigned managed identity resource ID."
 }
 
 output "client_id" {
-  value       = local.client_id
-  description = "Client ID — used by the SecretProviderClass (userAssignedIdentityID) for IMDS auth."
+  value       = azurerm_user_assigned_identity.this.client_id
+  description = "Client ID — used for the ServiceAccount annotation + SecretProviderClass clientID (Workload Identity)."
 }
 
 output "principal_id" {
-  value       = local.principal_id
-  description = "Principal ID — informational (miniblue KV data plane does not enforce it)."
+  value       = azurerm_user_assigned_identity.this.principal_id
+  description = "Principal ID of the user-assigned identity."
 }

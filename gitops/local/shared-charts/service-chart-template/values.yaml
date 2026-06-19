@@ -28,7 +28,8 @@ secrets:
   enabled: true
   # Emulated Key Vault name (from the key-vault module output).
   keyvaultName: ""
-  # User-Assigned MI client_id (from the managed-identity output) — IMDS auth.
+  # User-Assigned MI client_id (from the managed-identity output) — drives the
+  # ServiceAccount annotation + SecretProviderClass clientID for Workload Identity.
   managedIdentityClientId: ""
   # miniblue mock tenant id (matches root.hcl ARM_TENANT_ID).
   tenantId: "11111111-1111-1111-1111-111111111111"

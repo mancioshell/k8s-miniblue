@@ -18,8 +18,11 @@ export SCRIPT_DIR REPO_ROOT
 # so miniblue can't shell out to launch k3s and falls back to the ARM-only stub backend.
 # We build `miniblue:full` locally from the pinned source (target=full adds the docker CLI).
 export MINIBLUE_IMAGE="${MINIBLUE_IMAGE:-miniblue:full}"
-export MINIBLUE_SRC_REPO="${MINIBLUE_SRC_REPO:-https://github.com/moabukar/miniblue.git}"
-export MINIBLUE_SRC_REF="${MINIBLUE_SRC_REF:-v0.7.0}"
+# Maintained fork carrying the Key Vault canonical-host routing + Workload Identity
+# (federated token / JWKS) changes. Upstream is github.com/moabukar/miniblue @ v0.7.0;
+# the fork branch `wi-keyvault` is built into the local `miniblue:full` image.
+export MINIBLUE_SRC_REPO="${MINIBLUE_SRC_REPO:-https://github.com/mancioshell/miniblue.git}"
+export MINIBLUE_SRC_REF="${MINIBLUE_SRC_REF:-wi-keyvault}"
 export MINIBLUE_CONTAINER="${MINIBLUE_CONTAINER:-miniblue}"
 
 # ---------------------------------------------------------------------------
@@ -34,6 +37,28 @@ export ARM_METADATA_HOSTNAME="${ARM_METADATA_HOSTNAME:-${MINIBLUE_HOST}:${MINIBL
 
 # Real AKS backend: miniblue launches a real rancher/k3s container per cluster.
 export AKS_BACKEND="${AKS_BACKEND:-k3s}"
+
+# ---------------------------------------------------------------------------
+# Key Vault canonical data-plane host(s)
+#   azurerm encodes the vault in the data-plane HOST (<name>.vault.azure.net), so the
+#   terraform host must resolve that FQDN to miniblue (127.0.0.1; miniblue HTTPS is
+#   republished on :443). The in-cluster CSI resolves the same host via CoreDNS; the
+#   terraform host uses a hosts-file entry added by startup.sh (trust_miniblue_dns) and
+#   removed by teardown.sh. Derived from the env naming_suffix (vault name = kv-<suffix>);
+#   override the whole space-separated list with KV_VAULT_FQDNS if needed.
+# ---------------------------------------------------------------------------
+export MINIBLUE_NAMING_SUFFIX="${MINIBLUE_NAMING_SUFFIX:-mb-local}"
+export KV_VAULT_FQDNS="${KV_VAULT_FQDNS:-kv-${MINIBLUE_NAMING_SUFFIX}.vault.azure.net}"
+
+# ---------------------------------------------------------------------------
+# Workload Identity OIDC issuer
+#   Stamped onto projected ServiceAccount tokens by the k3s kube-apiserver
+#   (service-account-issuer) AND registered as the federated-credential issuer
+#   so Azure Workload Identity can match a token to a credential. Both sides
+#   MUST use the same value. miniblue does not validate the token signature
+#   (lenient model), so this only needs to be a stable, agreed-upon string.
+# ---------------------------------------------------------------------------
+export MINIBLUE_SA_ISSUER="${MINIBLUE_SA_ISSUER:-https://miniblue.local/oidc}"
 
 # ---------------------------------------------------------------------------
 # Fake ARM credentials (miniblue requires NO real auth; values are placeholders)

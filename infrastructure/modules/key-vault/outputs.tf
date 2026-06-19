@@ -1,20 +1,20 @@
 # MODULE OUTPUTS
 output "id" {
-  value       = local.id
-  description = "Key Vault resource ID (synthetic — emulator stub)."
+  value       = azurerm_key_vault.this.id
+  description = "Key Vault resource ID."
 }
 
 output "vault_uri" {
-  value       = local.vault_uri
-  description = "Vault URI (data-plane endpoint for secret resolution)."
+  value       = azurerm_key_vault.this.vault_uri
+  description = "Vault URI (canonical data-plane endpoint for secret resolution)."
 }
 
 output "name" {
-  value       = local.name
+  value       = azurerm_key_vault.this.name
   description = "Key Vault name — consumed by the SecretProviderClass keyvaultName."
 }
 
 output "seeded_secret_names" {
-  value       = sort(keys(random_password.secret))
-  description = "Names of the secrets generated and seeded into the KV data plane."
+  value       = sort(keys(azurerm_key_vault_secret.this))
+  description = "Names of the secrets generated and stored in the vault."
 }

@@ -12,12 +12,11 @@ locals {
   location      = local.env_vars.locals.location
 
   # miniblue endpoint wiring (overridable via env; defaults match scripts/lib/common.sh).
-  arm_metadata_hostname  = get_env("ARM_METADATA_HOSTNAME", "localhost:4567")
-  keyvault_dataplane_url = get_env("KV_DATAPLANE", "http://localhost:4566")
-  subscription_id        = get_env("ARM_SUBSCRIPTION_ID", "00000000-0000-0000-0000-000000000000")
-  tenant_id              = get_env("ARM_TENANT_ID", "11111111-1111-1111-1111-111111111111")
-  client_id              = get_env("ARM_CLIENT_ID", "22222222-2222-2222-2222-222222222222")
-  client_secret          = get_env("ARM_CLIENT_SECRET", "miniblue-fake-secret")
+  arm_metadata_hostname = get_env("ARM_METADATA_HOSTNAME", "localhost:4567")
+  subscription_id       = get_env("ARM_SUBSCRIPTION_ID", "00000000-0000-0000-0000-000000000000")
+  tenant_id             = get_env("ARM_TENANT_ID", "11111111-1111-1111-1111-111111111111")
+  client_id             = get_env("ARM_CLIENT_ID", "22222222-2222-2222-2222-222222222222")
+  client_secret         = get_env("ARM_CLIENT_SECRET", "miniblue-fake-secret")
 
   common_tags = {
     project     = "k8s-miniblue"
@@ -45,7 +44,14 @@ generate "provider" {
   if_exists = "overwrite_terragrunt"
   contents  = <<-EOF
     provider "azurerm" {
-      features {}
+      features {
+        key_vault {
+          # miniblue is ephemeral and does not implement soft-delete purge/recovery;
+          # disabling these keeps create + `terragrunt run-all destroy` clean.
+          purge_soft_delete_on_destroy    = false
+          recover_soft_deleted_key_vaults = false
+        }
+      }
 
       skip_provider_registration = true
       use_cli                    = false
@@ -67,7 +73,4 @@ inputs = {
   naming_suffix = local.naming_suffix
   location      = local.location
   tags          = local.common_tags
-
-  # Consumed by the key-vault unit to seed randomly-generated secrets into miniblue.
-  keyvault_dataplane_url = local.keyvault_dataplane_url
 }

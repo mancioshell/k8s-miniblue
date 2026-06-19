@@ -51,4 +51,18 @@ if command -v powershell.exe >/dev/null 2>&1; then
 fi
 rm -f "${MINIBLUE_CERT_FILE}" 2>/dev/null || true
 
+# 5) Remove the Key Vault canonical host(s) from the hosts file (added by startup.sh).
+#    Windows needs elevation (UAC); matches the "# miniblue-kv"-tagged lines only.
+if command -v powershell.exe >/dev/null 2>&1; then
+  win_ps1="$(cygpath -w "${REPO_ROOT}/scripts/lib/hosts-entry.ps1")"
+  log "removing KV canonical host(s) from the Windows hosts file"
+  MSYS_NO_PATHCONV=1 powershell.exe -NoProfile -NonInteractive -Command \
+    "Start-Process powershell -Verb RunAs -Wait -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File','${win_ps1}','-Action','remove','-Hosts','${KV_VAULT_FQDNS}'" \
+    2>/dev/null || warn "could not clean up the hosts file (remove the '# miniblue-kv' lines manually if needed)"
+elif [[ -w /etc/hosts ]] || command -v sudo >/dev/null 2>&1; then
+  log "removing KV canonical host(s) from /etc/hosts"
+  sudo sed -i.bak '/# miniblue-kv$/d' /etc/hosts 2>/dev/null || \
+    warn "could not clean up /etc/hosts (remove the '# miniblue-kv' lines manually if needed)"
+fi
+
 ok "teardown complete"

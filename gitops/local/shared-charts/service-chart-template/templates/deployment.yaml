@@ -13,7 +13,15 @@ spec:
     metadata:
       labels:
         {{- include "service-chart-template.labels" . | nindent 8 }}
+        {{- if .Values.secrets.enabled }}
+        # Required by the azure-workload-identity mutating webhook to inject the
+        # projected SA token + AZURE_* env vars into the pod (FR-013).
+        azure.workload.identity/use: "true"
+        {{- end }}
     spec:
+      {{- if .Values.secrets.enabled }}
+      serviceAccountName: {{ include "service-chart-template.serviceAccountName" . }}
+      {{- end }}
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}

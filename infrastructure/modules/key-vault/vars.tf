@@ -20,6 +20,12 @@ variable "managed_identity_principal_id" {
 }
 
 # OPTIONAL MODULE PARAMETERS
+variable "tenant_id" {
+  type        = string
+  default     = "11111111-1111-1111-1111-111111111111"
+  description = "Tenant ID for the vault and its access policy (miniblue's fixed local tenant)."
+}
+
 variable "sku_name" {
   type        = string
   default     = "standard"
@@ -33,19 +39,13 @@ variable "sku_name" {
 variable "random_secret_names" {
   type        = list(string)
   default     = ["app-greeting-secret"]
-  description = "Secret names to generate (random value) and seed into the miniblue KV data plane. The chart's SecretProviderClass references these by name."
+  description = "Secret names to generate (random value) and store in the vault. The chart's SecretProviderClass references these by name."
 }
 
 variable "secret_length" {
   type        = number
   default     = 32
   description = "Character length of each generated random secret value."
-}
-
-variable "keyvault_dataplane_url" {
-  type        = string
-  default     = "http://localhost:4566"
-  description = "Base URL of the miniblue Key Vault data plane (host-published port). Seeding targets <url>/keyvault/<vault>/secrets/<name>."
 }
 
 variable "tags" {

@@ -1,11 +1,14 @@
 # -----------------------------------------------------------------------
-# key-vault — EMULATOR STUB.
-# miniblue does NOT implement the Key Vault ARM control plane: vault create and
-# access policies return 404 (see API parity matrix). It DOES implement the Key
-# Vault secrets data plane (parity: Full), keyed by vault NAME, with no RBAC /
-# access-policy enforcement. The CSI provider reads secrets straight from that
-# data plane (seeded by the null_resource.seed local-exec below). So this module just
-# exposes the vault name/URI as constants instead of provisioning ARM resources.
+# key-vault — REAL Azure Resource Manager resources against miniblue.
+# The miniblue fork implements BOTH the Key Vault ARM control plane
+# (Microsoft.KeyVault/vaults create/get/delete) and the secrets data plane,
+# advertising a CANONICAL data-plane host (properties.vaultUri =
+# https://<name>.vault.azure.net/). azurerm parses a secret ID by its URL host, so the
+# vault must be encoded in the host — hence the canonical FQDN, resolved to miniblue by:
+#   - CoreDNS for in-cluster pods (the CSI provider), and
+#   - a hosts-file entry on the terraform host (added by scripts/startup.sh).
+# Both land on miniblue, which keys secrets by vault NAME, so terraform-written secrets
+# and CSI-read secrets share one data plane. miniblue enforces no RBAC/access-policy.
 # -----------------------------------------------------------------------
 terraform {
   required_version = ">= 1.10.3"
@@ -18,18 +21,13 @@ terraform {
       source  = "hashicorp/random"
       version = "= 3.6.3"
     }
-    null = {
-      source  = "hashicorp/null"
-      version = "= 3.2.3"
-    }
   }
 }
 
 locals {
   # Key Vault names disallow hyphens beyond the standard pattern; keep <= 24 chars.
-  name      = substr(replace(join("-", compact(["kv", var.naming_suffix])), "--", "-"), 0, 24)
-  vault_uri = "https://${local.name}.vault.azure.net/"
-  id        = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/${var.resource_group_name}/providers/Microsoft.KeyVault/vaults/${local.name}"
+  name = substr(replace(join("-", compact(["kv", var.naming_suffix])), "--", "-"), 0, 24)
+  tags = merge(var.tags, var.additional_tags)
 }
 
 # -----------------------------------------------------------------------
@@ -51,41 +49,41 @@ resource "random_password" "secret" {
 }
 
 # -----------------------------------------------------------------------
-# Seed each secret into the miniblue Key Vault data plane (parity: Full),
-# keyed by vault NAME. Runs from the host against the published data-plane
-# port (default localhost:4566), so it is independent of the in-cluster
-# network wiring (scripts/startup.sh restarts k3s — NOT miniblue — so seeded
-# values survive those restarts). PUT is idempotent; triggers re-seed only when
-# the value, vault name, or endpoint changes (keeps idempotency checks green).
+# The Key Vault (ARM control plane). The access policy grants the platform's
+# User-Assigned MI secret read — shape parity with real Azure; miniblue does not
+# enforce it (the CSI authenticates via Workload Identity).
 # -----------------------------------------------------------------------
-resource "null_resource" "seed" {
+resource "azurerm_key_vault" "this" {
+  name                = local.name
+  location            = var.location
+  resource_group_name = var.resource_group_name
+  tenant_id           = var.tenant_id
+  sku_name            = var.sku_name
+
+  # miniblue is ephemeral and does not implement soft-delete purge; keep teardown clean
+  # (provider features.key_vault.purge_soft_delete_on_destroy is also disabled in root.hcl).
+  purge_protection_enabled   = false
+  soft_delete_retention_days = 7
+
+  access_policy {
+    tenant_id = var.tenant_id
+    object_id = var.managed_identity_principal_id
+
+    secret_permissions = ["Get", "List"]
+  }
+
+  tags = local.tags
+}
+
+# -----------------------------------------------------------------------
+# Secrets (data plane). azurerm PUTs each value to the canonical vault host and
+# reads it back by the versioned secret ID; miniblue stores it keyed by vault name,
+# where the in-cluster CSI provider reads it.
+# -----------------------------------------------------------------------
+resource "azurerm_key_vault_secret" "this" {
   for_each = random_password.secret
 
-  triggers = {
-    vault      = local.name
-    secret     = each.key
-    endpoint   = var.keyvault_dataplane_url
-    value_hash = nonsensitive(sha256(each.value.result))
-  }
-
-  provisioner "local-exec" {
-    interpreter = ["bash", "-c"]
-    on_failure  = fail
-
-    environment = {
-      KV_URL  = "${var.keyvault_dataplane_url}/keyvault/${local.name}/secrets/${each.key}"
-      KV_BODY = jsonencode({ value = each.value.result })
-    }
-
-    command = <<-EOT
-      set -euo pipefail
-      code=$(curl -s -o /dev/null -w '%%{http_code}' -X PUT \
-        -H 'Content-Type: application/json' \
-        "$KV_URL" --data "$KV_BODY")
-      case "$code" in
-        2*) echo "[+] seeded KV secret (HTTP $code)";;
-        *)  echo "[x] KV seed failed (HTTP $code) at $KV_URL" >&2; exit 1;;
-      esac
-    EOT
-  }
+  name         = each.key
+  value        = each.value.result
+  key_vault_id = azurerm_key_vault.this.id
 }

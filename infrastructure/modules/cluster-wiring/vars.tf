@@ -42,14 +42,7 @@ variable "app_namespaces" {
   description = "App namespaces to pre-create and seed with the imagePullSecret (ArgoCD adopts them at sync)."
 }
 
-variable "miniblue_data_port" {
+variable "miniblue_ca_path" {
   type        = string
-  default     = "4566"
-  description = "miniblue HTTP data-plane port (Key Vault / IMDS backend)."
-}
-
-variable "kv_ca_out" {
-  type        = string
-  default     = ""
-  description = "Optional host path to also write the generated KV CA PEM (for debugging). Empty = script default."
+  description = "Host path to miniblue's self-signed CA PEM (exported by startup). Distributed as the miniblue-kv-ca ConfigMap the CSI provider trusts."
 }

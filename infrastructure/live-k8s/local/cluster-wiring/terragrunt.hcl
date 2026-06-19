@@ -27,6 +27,7 @@ inputs = {
   pull_secret_name = "ghcr-pull"
   app_namespaces   = ["service-a", "service-b"]
 
-  miniblue_data_port = get_env("MINIBLUE_DATA_PORT", "4566")
-  kv_ca_out          = "${get_repo_root()}/.miniblue-kv-ca.pem"
+  # miniblue's self-signed CA (exported by startup) — distributed as the
+  # miniblue-kv-ca ConfigMap so the CSI provider-azure trusts miniblue's TLS.
+  miniblue_ca_path = "${get_repo_root()}/.miniblue-cert.pem"
 }

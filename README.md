@@ -16,19 +16,31 @@ driver.
 - A GitHub repo for the GitOps source (public, or private with `GITOPS_REPO_TOKEN`)
 - A **classic GitHub PAT** with `read:packages` (+ `write:packages` to publish) for `ghcr.io` —
   images and the shared chart live in **private** GHCR packages; provide it as `GHCR_TOKEN`
-- miniblue `:full` image (or host binary) — the real AKS backend needs the docker CLI
+- miniblue `:full` image (or host binary) — the real AKS backend needs the docker CLI. The image
+  is **built locally** by `scripts/startup.sh` from the maintained fork
+  ([github.com/mancioshell/miniblue](https://github.com/mancioshell/miniblue), branch `wi-keyvault`),
+  which carries the Key Vault canonical-host routing + Workload Identity changes. The pin lives in
+  `scripts/lib/common.sh` (`MINIBLUE_SRC_REPO` / `MINIBLUE_SRC_REF`); override either via `.env` to
+  build a different branch/fork. To bump: push to the fork branch and update `MINIBLUE_SRC_REF`.
 - Git-Bash on Windows (the scripts use `MSYS_NO_PATHCONV=1` / `cygpath`); on Linux/macOS they run as-is
+- **Host port 443 must be free** for miniblue (the canonical Key Vault data plane,
+  `https://<vault>.vault.azure.net/`, is reached on `:443` from both the terraform host and
+  in-cluster pods). If another service owns `:443` it shadows miniblue and the azurerm provider
+  fails with `tls: failed to verify certificate`. On Rancher Desktop this is its bundled Traefik —
+  free `:443` with `rdctl set --kubernetes.options.traefik=false` (reversible with `=true`; the
+  toggle briefly restarts dockerd — wait for `docker info` to recover). `scripts/startup.sh`
+  preflights this and prints the same guidance.
 
 ## Architecture
 
 ```text
 Terragrunt ─► miniblue ARM ─► RG, Managed Identity, ACR, Key Vault, AKS(real k3s container)
                                                                │ admin kubeconfig
-Terraform modules ────────────────────────────────────────────┴─► ArgoCD + Secrets Store CSI + cluster-wiring
+Terraform modules ────────────────────────────────────────────┴─► ArgoCD + Secrets Store CSI + cluster-wiring + Workload Identity webhook
 GHCR (ghcr.io) ─► image bytes ──────────(imagePullSecret ghcr-pull)──► kubelet pulls image
 GHCR (ghcr.io) ─► shared chart (OCI) ┐
 Git repo ($values) ─► per-service values ┴─► ArgoCD ApplicationSet ─► Application/service ─► auto-sync
-Key Vault secret ─► CSI (UAMI via IMDS, miniblue-kv-proxy) ──────────► pod env at runtime
+Key Vault secret ─► CSI (Workload Identity: projected SA token → AAD federation) ─► pod env at runtime
 ```
 
 - **Multi-source delivery**: each ArgoCD `Application` has two sources — the **shared, generic**
@@ -49,7 +61,8 @@ Key Vault secret ─► CSI (UAMI via IMDS, miniblue-kv-proxy) ─────�
 
 A full bring-up is two scripts: publish the artifacts, then `startup.sh` (one command that
 brings up the platform substrate — miniblue/real AKS — and the whole Terraform stack,
-including the mandatory image-pull-secret → KV-proxy wiring). GitOps is part of the same
+including the image-pull-secret, the CoreDNS/CA-trust wiring, and the Azure Workload Identity
+webhook). GitOps is part of the same
 apply: `startup.sh` enables the ArgoCD root app when `GITOPS_REPO_URL` is set (via `.env`).
 Terraform also generates a random Key Vault secret and seeds it into miniblue during the
 apply — no manual seeding.
@@ -65,7 +78,8 @@ gh workflow run build-publish.yml -f service=service-b   -f version=1.0.0
 gh workflow run publish-chart.yml -f version=1.1.0
 
 # miniblue (real AKS/k3s) + tf apply (+random KV secret) + creds + cluster-wiring
-# (pull secret + KV/IMDS shim) AND GitOps wiring, in order. GITOPS_REPO_URL (and
+# (pull secret + CoreDNS/CA-trust) + Workload Identity webhook AND GitOps wiring, in
+# order. GITOPS_REPO_URL (and
 # GITOPS_REPO_TOKEN for a private repo) plus GHCR_TOKEN (to PULL the private packages)
 # come from the gitignored .env (copy .env.example to .env and fill it in).
 scripts/startup.sh
@@ -109,9 +123,9 @@ git add gitops/local/argocd-apps/applicationset.yaml && \
 ```
 
 > Re-provisioning note: a `docker restart` of the k3s container wipes runtime-only state
-> (shared mount, IMDS DNAT, the in-cluster pull secret / KV-proxy wiring). Re-run
+> (shared mount, the in-cluster pull secret, and the CoreDNS/CA-trust wiring). Re-run
 > `scripts/startup.sh` to restore them (it re-applies cluster-wiring: image pull secret then
-> the KV/IMDS shim).
+> the CoreDNS overrides + miniblue CA trust bundle).
 
 ## Teardown
 
@@ -123,7 +137,7 @@ scripts/teardown.sh   # destroys Azure objects + k3s container, removes registry
 
 | Path | Purpose |
 |------|---------|
-| `infrastructure/modules/` | Reusable Terraform modules (RG, MI, ACR, KV, AKS) + platform add-ons (`argocd`, `secrets-csi`, `cluster-wiring`). |
+| `infrastructure/modules/` | Reusable Terraform modules (RG, MI, ACR, KV, AKS, `federated-credential`) + platform add-ons (`argocd`, `secrets-csi`, `cluster-wiring`, `workload-identity`). |
 | `infrastructure/live-k8s/local/` | Terragrunt composition for the single `local` environment (one unit + tfstate per object). |
 | `apps/<service>/` | Each Spring Boot service: application code + multi-stage Dockerfile **only** (e.g. `service-a`, `service-b`). |
 | `gitops/local/shared-charts/service-chart-template/` | The **one shared, generic** Helm chart reused by every service (Deployment, Service, SecretProviderClass). |
@@ -152,10 +166,15 @@ scripts/teardown.sh   # destroys Azure objects + k3s container, removes registry
   — no manual seeding. The value is stable across applies (regenerates only on taint). miniblue's
   data plane is in-memory, so a **miniblue** restart needs a re-seed (re-run `terraform apply`,
   e.g. via `scripts/startup.sh`); a **k3s** restart (`scripts/startup.sh`) does not affect it.
-- **Workload Identity (AAD federation) is unavailable** on miniblue — pod identity uses a
-  User-Assigned MI via IMDS, brokered by the `miniblue-kv-proxy` shim installed by the
-  `cluster-wiring` module (TLS proxy for `*.vault.azure.net`, CoreDNS overrides, IMDS DNAT).
+- **Workload Identity (AAD federation)**: pod identity uses **Azure Workload Identity** — the
+  `workload-identity` module installs the official mutating webhook, which projects a
+  ServiceAccount token (audience `api://AzureADTokenExchange`) and injects the `AZURE_*` env vars
+  so the Azure SDK exchanges that token for an access token. miniblue (lenient model) signs the
+  exchange; the `federated-credential` module registers a FIC per service binding the UAMI to
+  `system:serviceaccount:<ns>:<service>-sa`. No IMDS, no proxy, no client secrets. The Key Vault
+  data plane is served on the **canonical host** `<vault>.vault.azure.net`, resolved to miniblue
+  by the `cluster-wiring` CoreDNS overrides and trusted via miniblue's CA bundle.
 - **Restart wipes runtime state**: a `docker restart` of the k3s container drops the shared
-  mount, IMDS DNAT, and in-cluster wiring — re-run `scripts/startup.sh` to restore them.
+  mount and in-cluster wiring — re-run `scripts/startup.sh` to restore them.
 - k3s disables Traefik — access services via `kubectl port-forward`.
 - Local Terraform state is intentional and compliant for this single, non-shared environment.
