@@ -18,15 +18,6 @@ dependency "kubeconfig" {
 inputs = {
   kubeconfig_path = dependency.kubeconfig.outputs.kubeconfig_path
 
-  # GHCR pull auth for PRIVATE packages: pre-create each app namespace and a
-  # dockerconfigjson imagePullSecret in it so the node can pull from ghcr.io.
-  # Empty token = public packages, the step is skipped (no secret written).
-  registry_host    = get_env("REGISTRY_HOST", "ghcr.io")
-  ghcr_username    = get_env("GHCR_USERNAME", "")
-  ghcr_token       = get_env("GHCR_TOKEN", "")
-  pull_secret_name = "ghcr-pull"
-  app_namespaces   = ["service-a", "service-b"]
-
   # miniblue's self-signed CA (exported by startup) — distributed as the
   # miniblue-kv-ca ConfigMap so the CSI provider-azure trusts miniblue's TLS.
   miniblue_ca_path = "${get_repo_root()}/.miniblue-cert.pem"

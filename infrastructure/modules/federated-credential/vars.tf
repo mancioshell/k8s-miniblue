@@ -1,12 +1,7 @@
 # REQUIRED MODULE PARAMETERS
 variable "resource_group_name" {
   type        = string
-  description = "Resource group that holds the parent user-assigned managed identity."
-}
-
-variable "user_assigned_identity_id" {
-  type        = string
-  description = "Resource ID of the parent user-assigned managed identity (managed-identity output `id`)."
+  description = "Resource group that holds the parent user-assigned managed identities."
 }
 
 variable "issuer" {
@@ -17,14 +12,12 @@ variable "issuer" {
 # OPTIONAL MODULE PARAMETERS
 variable "services" {
   type = map(object({
-    namespace       = string
-    service_account = string
+    namespace                 = string
+    service_account           = string
+    user_assigned_identity_id = string
   }))
-  default = {
-    service-a = { namespace = "service-a", service_account = "service-a-sa" }
-    service-b = { namespace = "service-b", service_account = "service-b-sa" }
-  }
-  description = "Services to bind: map key -> { namespace, service_account }. Subject = system:serviceaccount:<namespace>:<service_account>."
+  default     = {}
+  description = "Services to bind: map key -> { namespace, service_account, user_assigned_identity_id }. Each entry creates one federated credential on the given identity. SA subject = system:serviceaccount:<namespace>:<service_account>."
 }
 
 variable "audience" {

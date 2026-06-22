@@ -12,14 +12,14 @@ import org.springframework.stereotype.Component;
 @Component("secret")
 public class SecretHealthIndicator implements HealthIndicator {
 
-    @Value("${APP_GREETING_SECRET:}")
+    @Value("${SERVICE_A_SECRET:}")
     private String greetingSecret;
 
     @Override
     public Health health() {
         if (greetingSecret == null || greetingSecret.isBlank()) {
-            return Health.down().withDetail("APP_GREETING_SECRET", "absent").build();
+            return Health.down().withDetail("SERVICE_A_SECRET", "absent").build();
         }
-        return Health.up().withDetail("APP_GREETING_SECRET", "present").build();
+        return Health.up().withDetail("SERVICE_A_SECRET", "present").build();
     }
 }

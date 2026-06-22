@@ -15,7 +15,7 @@ import java.util.Map;
 public class ServiceAController {
 
     // Populated from the synced Kubernetes Secret (CSI). Empty default makes absence observable.
-    @Value("${APP_GREETING_SECRET:}")
+    @Value("${SERVICE_A_SECRET:}")
     private String greetingSecret;
 
     @Value("${app.version:unknown}")

@@ -24,7 +24,7 @@ resource "azurerm_federated_identity_credential" "this" {
 
   name                = "fic-${each.key}"
   resource_group_name = var.resource_group_name
-  parent_id           = var.user_assigned_identity_id
+  parent_id           = each.value.user_assigned_identity_id
   audience            = [var.audience]
   issuer              = var.issuer
   subject             = "system:serviceaccount:${each.value.namespace}:${each.value.service_account}"

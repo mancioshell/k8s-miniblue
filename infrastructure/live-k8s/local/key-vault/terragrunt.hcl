@@ -22,7 +22,12 @@ dependency "mi" {
   mock_outputs_allowed_terraform_commands = ["validate", "plan", "console"]
 }
 
+locals {
+  env_locals = read_terragrunt_config(find_in_parent_folders("env.hcl")).locals
+}
+
 inputs = {
   resource_group_name           = dependency.rg.outputs.resource_group_name
   managed_identity_principal_id = dependency.mi.outputs.principal_id
+  random_secret_names           = [for _, svc in local.env_locals.services : svc.secret_name]
 }

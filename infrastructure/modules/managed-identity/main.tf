@@ -27,3 +27,13 @@ resource "azurerm_user_assigned_identity" "this" {
   location            = var.location
   tags                = local.tags
 }
+
+# One dedicated identity per service (Workload Identity — each pod exchanges its own token).
+resource "azurerm_user_assigned_identity" "service" {
+  for_each = var.services
+
+  name                = join("-", compact(["uaid", var.naming_suffix, each.key]))
+  resource_group_name = var.resource_group_name
+  location            = var.location
+  tags                = local.tags
+}

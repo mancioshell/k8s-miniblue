@@ -15,6 +15,15 @@ variable "location" {
 }
 
 # OPTIONAL MODULE PARAMETERS
+variable "services" {
+  type = map(object({
+    namespace       = string
+    service_account = string
+  }))
+  default     = {}
+  description = "Per-service workload identity map (key = service name). Each entry creates a dedicated user-assigned managed identity named uaid-<naming_suffix>-<key>. Outputs are collected in service_identities."
+}
+
 variable "tags" {
   type        = map(string)
   default     = {}

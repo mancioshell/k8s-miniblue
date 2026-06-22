@@ -15,7 +15,8 @@
 #                        └─ key-vault          │
 #                                     aks ◄─────┘   (real k3s via miniblue AKS backend)
 #                                      └─ kubeconfig          (host-reachable kubeconfig, TF output)
-#                                            └─ cluster-wiring (ghcr-pull imagePullSecret + CoreDNS/CA-trust)
+#                                            └─ cluster-wiring (CoreDNS + miniblue CA-trust)
+#                                                  ├─ image-pull        (Reflector + ghcr-pull secret, auto-mirrored to all ns)
 #                                                  ├─ argocd            (ArgoCD + CRDs + optional root app)
 #                                                  ├─ secrets-csi       (Secrets Store CSI + Azure provider)
 #                                                  └─ workload-identity (azure-workload-identity webhook)
@@ -61,9 +62,13 @@ export AUTO_APPROVE="${AUTO_APPROVE:-true}"
 # and launches a real k3s container per AKS cluster create.
 # -----------------------------------------------------------------------------
 start_miniblue() {
-  # Set MINIBLUE_FORCE_BUILD=1 to force a fresh fork rebuild + container restart even when a
-  # (possibly stale) image/container already exists — needed after bumping MINIBLUE_SRC_REF.
-  local force_build="${MINIBLUE_FORCE_BUILD:-0}"
+  # MINIBLUE_FORCE_BUILD is intentionally DISABLED (pinned to 0). A forced rebuild deletes the
+  # local miniblue:full image and re-clones tmp/miniblue-src from the REMOTE fork, which would
+  # DISCARD the local (uncommitted) fork working tree under tmp/miniblue that the image is built
+  # from. To pick up local fork changes: rebuild manually
+  #   docker build --target=full -t miniblue:full ./tmp/miniblue
+  # then `docker rm -f miniblue` and re-run startup.sh (it reuses the local image).
+  local force_build=0
   if docker inspect "${MINIBLUE_CONTAINER}" >/dev/null 2>&1; then
     local state
     state="$(docker inspect -f '{{.State.Status}}' "${MINIBLUE_CONTAINER}")"

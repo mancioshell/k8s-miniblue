@@ -14,9 +14,20 @@ dependency "kubeconfig" {
   mock_outputs_allowed_terraform_commands = ["validate", "plan", "console"]
 }
 
-# Ordering: ArgoCD installs after the cluster is wired (pull secret + KV/IMDS shim ready).
+# Ordering: ArgoCD installs after the cluster is wired (CoreDNS/CA trust ready).
 dependency "cluster_wiring" {
   config_path = "../cluster-wiring"
+  mock_outputs = {
+    ready = "mock-ready"
+  }
+  mock_outputs_allowed_terraform_commands = ["validate", "plan", "console"]
+}
+
+# Ordering: the cluster-wide pull-secret reflector must be in place so app pods
+# (in namespaces ArgoCD creates via CreateNamespace=true) can pull private
+# ghcr.io images. Reflector auto-mirrors the ghcr-pull secret into new namespaces.
+dependency "image_pull" {
+  config_path = "../image-pull"
   mock_outputs = {
     ready = "mock-ready"
   }
